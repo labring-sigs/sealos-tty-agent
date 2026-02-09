@@ -1,15 +1,20 @@
 {
 	"$schema": "https://json.schemastore.org/tsconfig",
-	"extends": "./tsconfig.json",
 	"compilerOptions": {
+		"target": "esnext",
+		"lib": ["ESNext"],
+		"moduleDetection": "force",
 		"rootDir": "./src",
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
 		"allowImportingTsExtensions": false,
 		"declaration": true,
 		"declarationMap": true,
 		"noEmit": false,
 		"noEmitOnError": true,
 		"outDir": "./dist",
-		"sourceMap": true
+		"sourceMap": true,
+		"skipLibCheck": true
 	},
 	"include": ["src/**/*.ts"],
 	"exclude": ["node_modules", "dist"]

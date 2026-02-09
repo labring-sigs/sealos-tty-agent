@@ -1,22 +1,38 @@
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_IMAGE=node:24-slim
+# pnpm-lock.yaml uses lockfileVersion 9.x, so we pin to pnpm v9 to keep behavior stable.
+ARG PNPM_VERSION=9.15.9
 
 # ============================================
-# Stage 1: Dependencies
+# Stage 0: Base (tooling)
 # ============================================
-FROM node:22-slim AS deps
+FROM ${NODE_IMAGE} AS base
+
+ARG PNPM_VERSION
 
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm (pinned) with a reusable npm download cache.
+RUN --mount=type=cache,id=sealos-tty-agent-npm-cache,target=/root/.npm,sharing=locked \
+    npm install -g "pnpm@${PNPM_VERSION}" \
+    && pnpm config set store-dir /pnpm/store
 
-# Copy workspace configuration
+# ============================================
+# Stage 1: Dependencies (deterministic + cache-mount)
+# ============================================
+FROM base AS deps
+
+# Copy workspace manifests only (maximizes cache hit rate).
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/protocol-client/package.json ./packages/protocol-client/
 
-# Install dependencies with cache mount
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+# Populate pnpm store into a dedicated cache, then install fully offline.
+# This makes dependency retrieval largely independent of Docker layer cache.
+RUN --mount=type=cache,id=sealos-tty-agent-pnpm-store,target=/pnpm/store,sharing=locked \
+    pnpm fetch
+RUN --mount=type=cache,id=sealos-tty-agent-pnpm-store,target=/pnpm/store,sharing=locked \
+    pnpm install --offline --frozen-lockfile
 
 # ============================================
 # Stage 2: Build
@@ -26,39 +42,30 @@ FROM deps AS build
 # Copy source code
 COPY . .
 
-# Build the protocol-client package (generates dist/)
+# Build the protocol-client package (generates dist/*.d.ts)
 RUN pnpm run build
 
+# Strip devDependencies after build; runtime will copy these node_modules.
+RUN CI=true pnpm prune --prod
+
 # ============================================
-# Stage 3: Runtime
+# Stage 3: Runtime (no network install)
 # ============================================
-FROM node:22-slim AS runtime
+FROM ${NODE_IMAGE} AS runtime
 
 WORKDIR /app
-
-# Install pnpm for workspace resolution
-RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Set production environment
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy workspace files
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/protocol-client/package.json ./packages/protocol-client/
+# Copy production dependencies + workspace package output
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages/protocol-client ./packages/protocol-client
 
-# Install production dependencies only
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --prod
-
-# Copy built protocol-client package
-COPY --from=build /app/packages/protocol-client/dist ./packages/protocol-client/dist
-
-# Copy source code (will be executed directly with --experimental-strip-types)
-COPY src ./src
-
-# Copy config example (user should mount actual config.json)
-COPY config.example.json ./config.json
+# Copy app source code (executed directly with --experimental-strip-types)
+COPY --from=build /app/src ./src
 
 # Use non-root user
 USER node
