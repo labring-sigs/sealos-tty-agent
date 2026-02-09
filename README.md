@@ -25,7 +25,16 @@ Default: `http://localhost:3000`.
 
 ### Production
 
-_TBD_
+```bash
+# Using Docker Compose
+docker compose up -d
+
+# or use Docker CLI
+# Build the image
+docker build -t sealos-tty-agent:latest .
+# Spin up the container
+docker run -d -p 3000:3000 -v $(pwd)/config.json:/app/config.json:ro sealos-tty-agent:latest
+```
 
 ## Client usage
 

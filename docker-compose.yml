@@ -6,7 +6,6 @@ services:
     environment:
       - NODE_ENV=production
     volumes:
-      # Mount custom config if needed
       - ./config.json:/app/config.json:ro
     restart: unless-stopped
     healthcheck:
