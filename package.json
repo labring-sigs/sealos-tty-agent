@@ -8,7 +8,7 @@
 	},
 	"scripts": {
 		"build": "pnpm -C packages/protocol-client run build",
-		"publish:protocol-client": "pnpm -C packages/protocol-client publish --access public",
+		"publish:protocol-client": "cd packages/protocol-client && pnpm publish",
 		"dev": "node --watch --watch-path=src --experimental-strip-types src/index.ts",
 		"start": "node --experimental-strip-types src/index.ts",
 		"lint": "pnpm run build && eslint \"src/**/*.ts\" \"packages/**/*.ts\" --ignore-pattern \"**/*.d.ts\" --ignore-pattern \"**/dist/**\"",
