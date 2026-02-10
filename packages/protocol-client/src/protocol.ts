@@ -1,24 +1,24 @@
-import { z } from 'zod'
+import * as z from 'zod/mini'
 
 const ClientStdinTextSchema = z.object({
 	type: z.literal('stdin'),
 	data: z.string(),
-}).strict()
+})
 
 const ClientAuthSchema = z.object({
 	type: z.literal('auth'),
-	ticket: z.string().trim().min(1),
-}).strict()
+	ticket: z.string().check(z.trim(), z.minLength(1)),
+})
 
 const ClientResizeSchema = z.object({
 	type: z.literal('resize'),
-	cols: z.number().int().min(1),
-	rows: z.number().int().min(1),
-}).strict()
+	cols: z.number().check(z.gte(1), z.multipleOf(1)),
+	rows: z.number().check(z.gte(1), z.multipleOf(1)),
+})
 
 const ClientPingSchema = z.object({
 	type: z.literal('ping'),
-}).strict()
+})
 
 export const ClientFrameSchema = z.discriminatedUnion('type', [
 	ClientStdinTextSchema,
