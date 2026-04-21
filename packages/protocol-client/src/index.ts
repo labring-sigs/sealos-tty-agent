@@ -4,21 +4,20 @@ export {
 	safeJsonStringify,
 	safeParseClientFrame,
 	toErrorMessage,
+	TTY_KUBECONFIG_SUBPROTOCOL_PREFIX,
+	TTY_WS_SUBPROTOCOL,
 } from './protocol.js'
 export type { ClientFrame, ServerFrame } from './protocol.js'
 
 export type { ConnectTerminalStreamsOptions, TerminalStreams } from './streams.js'
 
-export { connectTerminalStreams, issueWsTicket } from './streams.js'
+export { connectTerminalStreams } from './streams.js'
 
 export type {
-	ErrorResponse,
+	ExecTarget,
 	ProtocolClientOptions,
 	TerminalSessionConnectOptions,
 	TerminalSessionState,
-	TicketTarget,
-	WsTicketRequest,
-	WsTicketResponse,
 } from './streams.js'
 
-export type { FetchLike, WsFactory, WsLike } from './types.js'
+export type { WsFactory, WsLike } from './types.js'

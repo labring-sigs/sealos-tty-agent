@@ -17,6 +17,7 @@ export type WsErrorEvent = unknown
  */
 export type WsLike = {
 	readonly readyState: WsReadyState
+	readonly protocol?: string
 	send: (data: string | Uint8Array) => void
 	close: (code?: number, reason?: string) => void
 	addEventListener?: ((type: 'open', listener: () => void) => void) & ((type: 'message', listener: (ev: WsMessageEvent) => void) => void) & ((type: 'close', listener: (ev: WsCloseEvent) => void) => void) & ((type: 'error', listener: (ev: WsErrorEvent) => void) => void)
@@ -29,11 +30,4 @@ export type WsLike = {
 	binaryType?: 'blob' | 'arraybuffer'
 }
 
-export type WsFactory = (url: string) => WsLike
-
-export type FetchLike = (input: string, init?: {
-	method?: string
-	headers?: Record<string, string>
-	body?: string
-	signal?: AbortSignal
-}) => Promise<{ ok: boolean, status: number, json: () => Promise<unknown> }>
+export type WsFactory = (url: string, protocols?: string | string[]) => WsLike
