@@ -100,9 +100,8 @@ function hasExecCredentialPlugin(kc: k8s.KubeConfig): boolean {
 }
 
 async function assertAuthenticated(kc: k8s.KubeConfig): Promise<KubeconfigResult<undefined>> {
-	const authApi = kc.makeApiClient(k8s.AuthenticationV1Api)
-
 	try {
+		const authApi = kc.makeApiClient(k8s.AuthenticationV1Api)
 		const review = await authApi.createSelfSubjectReview({
 			body: {
 				apiVersion: 'authentication.k8s.io/v1',
@@ -123,7 +122,10 @@ async function assertAuthenticated(kc: k8s.KubeConfig): Promise<KubeconfigResult
 			return fail(error.message)
 		}
 
-		return fail(error instanceof Error ? error.message : 'kubeconfig validation failed.')
+		if (error instanceof Error)
+			return fail(error.message)
+
+		return fail('kubeconfig validation failed.')
 	}
 }
 

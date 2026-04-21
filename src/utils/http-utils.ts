@@ -19,6 +19,38 @@ export const HTTP_ERRORS = {
 
 export type HttpErrorMessage = (typeof HTTP_ERRORS)[keyof typeof HTTP_ERRORS]
 
+export function toStableKubeconfigError(message: string): HttpErrorMessage {
+	const normalized = message.trim().toLowerCase()
+
+	if (normalized === HTTP_ERRORS.KubeconfigTooLarge)
+		return HTTP_ERRORS.KubeconfigTooLarge
+
+	if (
+		normalized.includes('exec credential plugin')
+		|| normalized.includes('credential plugins are not supported')
+	) {
+		return HTTP_ERRORS.UnsupportedKubeconfigCredentialPlugin
+	}
+
+	if (
+		normalized.includes('authentication failed')
+		|| normalized.includes('unauthorized')
+		|| normalized.includes('forbidden')
+		|| normalized.includes('system:anonymous')
+	) {
+		return HTTP_ERRORS.KubeconfigAuthenticationFailed
+	}
+
+	if (
+		normalized.includes('timed out')
+		|| normalized.includes('validation failed')
+	) {
+		return HTTP_ERRORS.KubeconfigValidationFailed
+	}
+
+	return HTTP_ERRORS.InvalidKubeconfig
+}
+
 export type ExecTarget = {
 	namespace: string
 	pod: string

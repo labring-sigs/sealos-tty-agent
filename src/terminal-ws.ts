@@ -19,7 +19,7 @@ import {
 import { cleanupSession, sendCtrl, startExecIfNeeded } from './terminal-session.ts'
 import { withTimeout } from './utils/async.ts'
 import { Config } from './utils/config.ts'
-import { HTTP_ERRORS, isOriginAllowed, parseExecQuery, parseUrl } from './utils/http-utils.ts'
+import { HTTP_ERRORS, isOriginAllowed, parseExecQuery, parseUrl, toStableKubeconfigError } from './utils/http-utils.ts'
 import { validateAndSanitizeKubeConfig } from './utils/k8s/kubeconfig.ts'
 import { logInfo, logWarn } from './utils/logger.ts'
 import { markAliveOnPong, startHeartbeat } from './utils/ws-heartbeat.ts'
@@ -48,6 +48,7 @@ async function authenticateSession(
 	sess: Session,
 	kubeconfigRaw: string,
 	source: 'subprotocol' | 'message',
+	isSessionAlive: () => boolean,
 	onAuthStarted: () => void,
 	onAuthFailed: (message: string) => void,
 ): Promise<void> {
@@ -60,11 +61,7 @@ async function authenticateSession(
 	if (Buffer.byteLength(kubeconfigRaw, 'utf8') > Config.WS_MAX_KUBECONFIG_BYTES) {
 		const message = HTTP_ERRORS.KubeconfigTooLarge
 		logWarn(`ws auth failed (${source})`, { id: conn.id, error: message })
-		sendCtrl(conn, { type: 'error', message })
-		try {
-			conn.close(1008, 'kubeconfig too large')
-		}
-		catch {}
+		onAuthFailed(message)
 		return
 	}
 
@@ -77,6 +74,8 @@ async function authenticateSession(
 		() => ({ ok: false, message: 'Authentication timed out while validating kubeconfig.' }),
 	)
 	sess.authenticating = false
+	if (!isSessionAlive())
+		return
 
 	if (result.ok) {
 		sess.kubeconfig = result.value
@@ -86,7 +85,7 @@ async function authenticateSession(
 	}
 
 	logWarn(`ws auth failed (${source})`, { id: conn.id, error: result.message })
-	onAuthFailed(result.message)
+	onAuthFailed(toStableKubeconfigError(result.message))
 }
 function makeConnection(ws: WebSocket): WsConnection {
 	const id = randomUUID()
@@ -172,21 +171,34 @@ export function attachTerminalWebSocketServer(server: HttpServer): WebSocketServ
 			authTimeout = undefined
 		}
 
-		const failAuthentication = (message: string) => {
-			sendCtrl(conn, { type: 'error', message })
+		const closeSession = (session: Session, code: number, reason: string) => {
+			cancelAuthTimeout()
 			sessions.delete(conn.id)
-			cleanupSession(sess)
+			cleanupSession(session)
 			try {
-				conn.close(1008, 'invalid kubeconfig')
+				conn.close(code, reason)
 			}
 			catch {}
+		}
+
+		const failAuthentication = (message: string) => {
+			sendCtrl(conn, { type: 'error', message })
+			closeSession(sess, 1008, 'invalid kubeconfig')
 		}
 
 		sendCtrl(conn, { type: 'ready' })
 
 		const offeredKubeconfig = getOfferedKubeconfig(req)
 		if (typeof offeredKubeconfig === 'string' && offeredKubeconfig.length > 0) {
-			void authenticateSession(conn, sess, offeredKubeconfig, 'subprotocol', cancelAuthTimeout, failAuthentication)
+			void authenticateSession(
+				conn,
+				sess,
+				offeredKubeconfig,
+				'subprotocol',
+				() => sessions.get(conn.id) === sess,
+				cancelAuthTimeout,
+				failAuthentication,
+			)
 		}
 
 		const handleCtrl = async (frame: ClientFrame): Promise<void> => {
@@ -195,7 +207,15 @@ export function attachTerminalWebSocketServer(server: HttpServer): WebSocketServ
 				return
 
 			if (frame.type === 'auth') {
-				await authenticateSession(conn, current, frame.kubeconfig, 'message', cancelAuthTimeout, failAuthentication)
+				await authenticateSession(
+					conn,
+					current,
+					frame.kubeconfig,
+					'message',
+					() => sessions.get(conn.id) === current,
+					cancelAuthTimeout,
+					failAuthentication,
+				)
 				return
 			}
 
@@ -207,10 +227,7 @@ export function attachTerminalWebSocketServer(server: HttpServer): WebSocketServ
 			if (typeof current.kubeconfig !== 'string' || current.kubeconfig.length === 0) {
 				sendCtrl(conn, { type: 'error', message: 'Not authenticated. Offer kubeconfig in Sec-WebSocket-Protocol or send { "type": "auth", "kubeconfig": "..." } first.' })
 				logWarn('ws rejected: not authenticated', { id: conn.id })
-				try {
-					conn.close(1008, 'not authenticated')
-				}
-				catch {}
+				closeSession(current, 1008, 'not authenticated')
 				return
 			}
 
@@ -242,10 +259,7 @@ export function attachTerminalWebSocketServer(server: HttpServer): WebSocketServ
 				if (typeof sess.kubeconfig !== 'string' || sess.kubeconfig.length === 0) {
 					sendCtrl(conn, { type: 'error', message: 'Not authenticated. Offer kubeconfig in Sec-WebSocket-Protocol or send { "type": "auth", "kubeconfig": "..." } first.' })
 					logWarn('ws rejected (binary): not authenticated', { id: conn.id })
-					try {
-						conn.close(1008, 'not authenticated')
-					}
-					catch {}
+					closeSession(sess, 1008, 'not authenticated')
 					return
 				}
 				const buf = rawToBuffer(data)
