@@ -47,7 +47,8 @@
 	"scripts": {
 		"prepack": "pnpm run build",
 		"build": "tsc -p tsconfig.build.json",
-		"typecheck": "tsc -p tsconfig.json"
+		"typecheck": "tsc -p tsconfig.json",
+		"postinstall": "pnpm run build"
 	},
 	"dependencies": {
 		"zod": "^4.3.6"
