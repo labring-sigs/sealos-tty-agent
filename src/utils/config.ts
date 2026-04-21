@@ -3,52 +3,46 @@ import { z } from 'zod'
 
 export type AppConfig = Readonly<{
 	PORT: number
+	KUBE_API_SERVER: string
 
-	WS_MAX_PAYLOAD: number
+	WS_MAX_PAYLOAD_BYTES: number
 	WS_HEARTBEAT_INTERVAL_MS: number
 
 	WS_AUTH_TIMEOUT_MS: number
-	WS_TICKET_TTL_MS: number
-	WS_TICKET_MAX_KUBECONFIG_BYTES: number
+	WS_MAX_KUBECONFIG_BYTES: number
 
 	/**
 	 * When non-empty, requests with missing/unknown Origin will be rejected.
 	 */
 	WS_ALLOWED_ORIGINS: string[]
-
-	DEBUG: boolean
 }>
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
 const DEFAULT_CONFIG: AppConfig = Object.freeze({
 	PORT: 3000,
+	KUBE_API_SERVER: '',
 
-	WS_MAX_PAYLOAD: 1024 * 1024,
+	WS_MAX_PAYLOAD_BYTES: 1024 * 1024,
 	WS_HEARTBEAT_INTERVAL_MS: 30_000,
 
 	WS_AUTH_TIMEOUT_MS: 10_000,
-	WS_TICKET_TTL_MS: 60_000,
-	WS_TICKET_MAX_KUBECONFIG_BYTES: 256 * 1024,
+	WS_MAX_KUBECONFIG_BYTES: 256 * 1024,
 
 	WS_ALLOWED_ORIGINS: [],
-
-	DEBUG: false,
 })
 
 const ConfigFileSchema = z.object({
 	PORT: z.number().int().min(1).max(65535).optional(),
+	KUBE_API_SERVER: z.string().trim().min(1).optional(),
 
-	WS_MAX_PAYLOAD: z.number().int().min(1).optional(),
+	WS_MAX_PAYLOAD_BYTES: z.number().int().min(1).optional(),
 	WS_HEARTBEAT_INTERVAL_MS: z.number().int().min(1).optional(),
 
 	WS_AUTH_TIMEOUT_MS: z.number().int().min(1).optional(),
-	WS_TICKET_TTL_MS: z.number().int().min(1).optional(),
-	WS_TICKET_MAX_KUBECONFIG_BYTES: z.number().int().min(1).optional(),
+	WS_MAX_KUBECONFIG_BYTES: z.number().int().min(1).optional(),
 
 	WS_ALLOWED_ORIGINS: z.array(z.string().trim().min(1)).optional(),
-
-	DEBUG: z.boolean().optional(),
 }).strict()
 
 /**
