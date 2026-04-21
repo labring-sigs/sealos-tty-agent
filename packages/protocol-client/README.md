@@ -39,7 +39,7 @@ void stdout
 ### Notes
 
 - The server starts `exec` only after the **first** `resize`.
-- By default the client sends `sealos-tty-v1` plus a URL-encoded kubeconfig-bearing subprotocol token during the WebSocket handshake.
+- By default the client sends `sealos-tty-v1` plus a base64url-encoded kubeconfig-bearing subprotocol token (with the `base64url.kubeconfig.` prefix) during the WebSocket handshake.
 - Set `connect.authInMessage = true` to send `{ type: 'auth', kubeconfig }` after the socket opens instead.
 - Use `TextDecoderStream()` (or `TextDecoder(..., { stream: true })`) for UTF-8 across frames.
 - In Node/SSR, inject `wsFactory` (e.g. `ws`) if `WebSocket` is missing.
