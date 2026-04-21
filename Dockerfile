@@ -14,7 +14,7 @@ ARG PNPM_VERSION
 WORKDIR /app
 
 # Install pnpm (pinned) with a reusable npm download cache.
-RUN --mount=type=cache,id=sealos-tty-agent-npm-cache,target=/root/.npm,sharing=locked \
+RUN --mount=type=cache,id=sealos-tty-bridge-npm-cache,target=/root/.npm,sharing=locked \
     npm install -g "pnpm@${PNPM_VERSION}" \
     && pnpm config set store-dir /pnpm/store
 
@@ -29,9 +29,9 @@ COPY packages/protocol-client/package.json ./packages/protocol-client/
 
 # Populate pnpm store into a dedicated cache, then install fully offline.
 # This makes dependency retrieval largely independent of Docker layer cache.
-RUN --mount=type=cache,id=sealos-tty-agent-pnpm-store,target=/pnpm/store,sharing=locked \
+RUN --mount=type=cache,id=sealos-tty-bridge-pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm fetch
-RUN --mount=type=cache,id=sealos-tty-agent-pnpm-store,target=/pnpm/store,sharing=locked \
+RUN --mount=type=cache,id=sealos-tty-bridge-pnpm-store,target=/pnpm/store,sharing=locked \
     pnpm install --offline --frozen-lockfile
 
 # ============================================

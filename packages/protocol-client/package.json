@@ -2,7 +2,7 @@
 	"name": "@labring/sealos-tty-client",
 	"type": "module",
 	"version": "0.0.2",
-	"description": "Web Streams API client for sealos-tty-agent (Kubernetes exec terminal over WebSocket).",
+	"description": "Web Streams API client for sealos-tty-bridge (Kubernetes exec terminal over WebSocket).",
 	"author": {
 		"name": "Sealos",
 		"url": "https://sealos.io"

@@ -1,6 +1,6 @@
 ## `@labring/sealos-tty-client`
 
-Web Streams API client for `sealos-tty-agent` (Kubernetes exec terminal over WebSocket).
+Web Streams API client for `sealos-tty-bridge` (Kubernetes exec terminal over WebSocket).
 
 ### Install
 
