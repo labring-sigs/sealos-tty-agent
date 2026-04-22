@@ -1,0 +1,26 @@
+# Custom values for sealos tty bridge Helm chart.
+# This file contains user-customizable overrides on top of values.yaml.
+#
+# Note: cloudDomain is automatically fetched from sealos-system/sealos-config
+# by the CLI and does not need to be manually configured here.
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 128Mi
+  limits:
+    cpu: '2'
+    memory: 2Gi
+
+config:
+  port: 3000
+  kubeApiServer: auto
+  wsMaxPayloadBytes: 1048576
+  wsHeartbeatIntervalMs: 30000
+  wsAuthTimeoutMs: 10000
+  wsMaxKubeconfigBytes: 262144
+  allowedOriginSubdomains:
+    - terminal
+  extraAllowedOrigins: []

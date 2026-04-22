@@ -1,0 +1,41 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "tty-bridge.ingressName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tty-bridge.labels" . | nindent 4 }}
+  {{- $annotations := dict }}
+  {{- with .Values.ingress.annotations }}
+  {{- $annotations = merge $annotations . }}
+  {{- end }}
+  {{- if and .Values.ingress.className (not (hasKey $annotations "kubernetes.io/ingress.class")) }}
+  {{- $_ := set $annotations "kubernetes.io/ingress.class" .Values.ingress.className }}
+  {{- end }}
+  {{- with $annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    - host: {{ include "tty-bridge.ingressHost" . | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "tty-bridge.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ include "tty-bridge.ingressHost" . | quote }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+{{- end }}

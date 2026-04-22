@@ -1,0 +1,26 @@
+{{- $allowedOrigins := list -}}
+{{- range .Values.config.allowedOriginSubdomains }}
+{{- $allowedOrigins = append $allowedOrigins (printf "https://%s.%s" . $.Values.cloudDomain) -}}
+{{- end }}
+{{- range .Values.config.extraAllowedOrigins }}
+{{- $allowedOrigins = append $allowedOrigins . -}}
+{{- end }}
+{{- $config := dict
+  "PORT" (.Values.config.port | int)
+  "KUBE_API_SERVER" .Values.config.kubeApiServer
+  "WS_MAX_PAYLOAD_BYTES" (.Values.config.wsMaxPayloadBytes | int)
+  "WS_HEARTBEAT_INTERVAL_MS" (.Values.config.wsHeartbeatIntervalMs | int)
+  "WS_AUTH_TIMEOUT_MS" (.Values.config.wsAuthTimeoutMs | int)
+  "WS_MAX_KUBECONFIG_BYTES" (.Values.config.wsMaxKubeconfigBytes | int)
+  "WS_ALLOWED_ORIGINS" $allowedOrigins
+-}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tty-bridge.configMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tty-bridge.labels" . | nindent 4 }}
+data:
+  config.json: |
+    {{- $config | toPrettyJson | nindent 4 }}

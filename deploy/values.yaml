@@ -1,0 +1,88 @@
+# Default values for sealos tty bridge Helm chart.
+
+nameOverride: tty-bridge-system
+fullnameOverride: tty-bridge-system
+
+image:
+  repository: ghcr.io/labring-sigs/sealos-tty-agent
+  tag: sha-028d430
+
+imagePullPolicy: Always
+imagePullSecrets: []
+
+replicaCount: 1
+
+# Auto configure from sealos-system configmap
+autoConfigEnabled: true
+
+# ============================================================================
+# Auto-configured values (from sealos-system/sealos-config ConfigMap)
+# ============================================================================
+# The following values are automatically fetched from the
+# sealos-system/sealos-config ConfigMap by the CLI and will
+# override any values set here. These are provided as reference defaults.
+#
+# To override these auto-configured values, use HELM_OPTIONS or modify the
+# sealos-config ConfigMap directly.
+# ============================================================================
+
+cloudDomain: 127.0.0.1.nip.io # Auto-fetched from sealos-config.cloudDomain
+
+# End of auto-configured values
+# ============================================================================
+
+configMap:
+  nameOverride: tty-bridge-config
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  runAsUser: 1001
+
+service:
+  port: 3000
+  targetPort: 3000
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 128Mi
+  limits:
+    cpu: '2'
+    memory: 2Gi
+
+config:
+  port: 3000
+  kubeApiServer: auto
+  wsMaxPayloadBytes: 1048576
+  wsHeartbeatIntervalMs: 30000
+  wsAuthTimeoutMs: 10000
+  wsMaxKubeconfigBytes: 262144
+  allowedOriginSubdomains:
+    - terminal
+  extraAllowedOrigins: []
+
+ingress:
+  enabled: true
+  nameOverride: sealos-tty-bridge
+  className: nginx
+  annotations: {}
+  # Host will be auto-configured from cloudDomain
+  hostPrefix: tty-bridge
+  path: /
+  pathType: Prefix
+  tls:
+    enabled: true
+    secretName: wildcard-cert
+
+nodeSelector: {}
+affinity: {}
+tolerations: []
