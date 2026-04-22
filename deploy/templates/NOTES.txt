@@ -1,0 +1,15 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+  export HOST={{ include "tty-bridge.ingressHost" . }}
+  echo "https://${HOST}"
+{{- else }}
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "tty-bridge.fullname" . }} 3000:{{ .Values.service.port }}
+{{- end }}
+
+2. The rendered config.json allows browser origins from:
+{{- range .Values.config.allowedOriginSubdomains }}
+  - https://{{ . }}.{{ $.Values.cloudDomain }}
+{{- end }}
+{{- range .Values.config.extraAllowedOrigins }}
+  - {{ . }}
+{{- end }}

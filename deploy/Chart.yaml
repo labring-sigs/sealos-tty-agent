@@ -1,0 +1,6 @@
+apiVersion: v2
+name: sealos-tty-bridge
+description: Helm chart for sealos tty bridge
+type: application
+version: 0.1.0
+appVersion: 0.0.1
