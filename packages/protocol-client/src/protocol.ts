@@ -1,7 +1,7 @@
 import * as z from 'zod/mini'
 
 export const TTY_WS_SUBPROTOCOL = 'sealos-tty-v1'
-export const TTY_KUBECONFIG_SUBPROTOCOL_PREFIX = 'base64url.kubeconfig.'
+export const TTY_KUBECONFIG_SUBPROTOCOL_PREFIX = 'urlencoded.kubeconfig.'
 
 const ClientStdinTextSchema = z.object({
 	type: z.literal('stdin'),
@@ -42,13 +42,12 @@ export type ServerFrame
 		| { type: 'pong' }
 
 export function encodeKubeconfigSubprotocol(kubeconfig: string): string {
-	let binary = ''
-	for (const byte of new TextEncoder().encode(kubeconfig))
-		binary += String.fromCharCode(byte)
-
-	const base64 = btoa(binary)
-	const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-	return `${TTY_KUBECONFIG_SUBPROTOCOL_PREFIX}${base64url}`
+	// Subprotocols must conform to item 10 of RFC6455 section 4.1 (namely, the HTTP "tokens").
+	// See: https://datatracker.ietf.org/doc/html/rfc6455#section-4.1
+	const encoded = encodeURIComponent(kubeconfig)
+		.replace(/\(/g, '%28')
+		.replace(/\)/g, '%29')
+	return `${TTY_KUBECONFIG_SUBPROTOCOL_PREFIX}${encoded}`
 }
 
 export function decodeKubeconfigSubprotocol(protocol: string): string | undefined {
@@ -60,12 +59,7 @@ export function decodeKubeconfigSubprotocol(protocol: string): string | undefine
 		return undefined
 
 	try {
-		const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(encoded.length / 4) * 4, '=')
-		const binary = atob(base64)
-		const bytes = new Uint8Array(binary.length)
-		for (let i = 0; i < binary.length; i += 1)
-			bytes[i] = binary.charCodeAt(i)
-		return new TextDecoder().decode(bytes)
+		return decodeURIComponent(encoded)
 	}
 	catch {
 		return undefined

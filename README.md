@@ -71,7 +71,7 @@ void stdout
 Notes:
 
 - The server starts Kubernetes `exec` only after receiving the **first** `resize`.
-- By default the client offers kubeconfig in `Sec-WebSocket-Protocol` using a stable `sealos-tty-v1` token plus a base64-encoded data-bearing token. Set `connect.authInMessage = true` to send kubeconfig in the first auth frame instead.
+- By default the client offers kubeconfig in `Sec-WebSocket-Protocol` using a stable `sealos-tty-v1` token plus a URL-encoded data-bearing token. Set `connect.authInMessage = true` to send kubeconfig in the first auth frame instead.
 - `KUBE_API_SERVER` overrides the current cluster `server` in user kubeconfigs. Set it to `auto` to derive `https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT_HTTPS` inside a Kubernetes pod.
 
 ## Run
