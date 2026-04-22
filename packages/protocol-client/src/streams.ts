@@ -1,6 +1,11 @@
 import type { ServerFrame } from './protocol.js'
-import type { FetchLike, WsCloseEvent, WsFactory, WsLike } from './types.js'
-import { safeJsonStringify, toErrorMessage } from './protocol.js'
+import type { WsCloseEvent, WsFactory, WsLike } from './types.js'
+import {
+	encodeKubeconfigSubprotocol,
+	safeJsonStringify,
+	toErrorMessage,
+	TTY_WS_SUBPROTOCOL,
+} from './protocol.js'
 
 export type TerminalStreams = {
 	/**
@@ -33,11 +38,6 @@ export type ConnectTerminalStreamsOptions = {
 	client: ProtocolClientOptions
 	connect: TerminalSessionConnectOptions
 	/**
-	 * Optional helper to fetch ticket by calling `/ws-ticket`.
-	 * If provided, `connect.ticket` is not required.
-	 */
-	ticketRequest?: WsTicketRequest
-	/**
 	 * Abort the connection and close streams.
 	 */
 	signal?: AbortSignal
@@ -68,40 +68,20 @@ function tryError<T>(c: Ctrl<T> | null | undefined, err: unknown): void {
  * - stdin is a binary WritableStream. For xterm:
  *   `term.onData(d => writer.write(new TextEncoder().encode(d)))`.
  */
-export type TicketTarget = {
+export type ExecTarget = {
 	namespace: string
 	pod: string
 	container?: string
 	command?: string[]
 }
 
-export type WsTicketRequest = TicketTarget & {
-	kubeconfig: string
-}
-
-export type WsTicketResponse = {
-	ok: true
-	ticket: string
-	expiresAt: number
-}
-
-export type ErrorResponse = {
-	ok: false
-	error: string
-}
-
 export type ProtocolClientOptions = {
 	baseUrl: string
-	/**
-	 * Override fetch implementation. If omitted, uses global fetch when available.
-	 */
-	fetch?: FetchLike
 	/**
 	 * Override WebSocket factory. If omitted, uses global WebSocket when available.
 	 */
 	wsFactory?: WsFactory
 	wsPath?: string
-	ticketPath?: string
 }
 
 export type TerminalSessionState
@@ -116,37 +96,30 @@ export type TerminalSessionState
 
 export type TerminalSessionConnectOptions = {
 	/**
-	 * Use an existing ticket.
+	 * kubeconfig used to authenticate the websocket session.
 	 */
-	ticket?: string
+	kubeconfig: string
 	/**
-	 * Provide a ticket lazily (e.g. by calling your own backend).
+	 * Target pod/container for the Kubernetes exec session.
 	 */
-	ticketProvider?: (signal: AbortSignal) => Promise<string>
+	target: ExecTarget
 	/**
 	 * Provide initial terminal size (cols/rows). If omitted, you can call `resize()` later.
 	 * Note: server will only start exec after receiving the first resize.
 	 */
 	initialSize?: { cols: number, rows: number }
 	/**
-	 * If true, puts ticket into WS query (?ticket=...). Useful for non-browser clients.
-	 * Default: false (send auth control frame).
+	 * If true, sends kubeconfig as the first auth frame instead of a subprotocol token.
+	 * Default: false (offer kubeconfig in Sec-WebSocket-Protocol).
 	 */
-	ticketInQuery?: boolean
-}
-
-function defaultFetchLike(): FetchLike {
-	const f = (globalThis as unknown as { fetch?: unknown }).fetch
-	if (typeof f !== 'function')
-		throw new Error('fetch is not available. Provide ProtocolClientOptions.fetch.')
-	return f as FetchLike
+	authInMessage?: boolean
 }
 
 function defaultWsFactory(): WsFactory {
 	const ws = (globalThis as unknown as { WebSocket?: unknown }).WebSocket
 	if (typeof ws !== 'function')
 		throw new Error('WebSocket is not available. Provide ProtocolClientOptions.wsFactory.')
-	return (url: string) => new (ws as new (url: string) => WsLike)(url)
+	return (url: string, protocols?: string | string[]) => new (ws as new (url: string, protocols?: string | string[]) => WsLike)(url, protocols)
 }
 
 function joinUrl(base: string, path: string): string {
@@ -156,11 +129,25 @@ function joinUrl(base: string, path: string): string {
 	return u.toString()
 }
 
-function toWsUrl(httpBase: string, wsPath: string, ticketInQuery?: string): string {
+function toWsUrl(httpBase: string, wsPath: string, target: ExecTarget): string {
 	const u = new URL(joinUrl(httpBase, wsPath))
 	u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
-	if (typeof ticketInQuery === 'string' && ticketInQuery.length > 0)
-		u.searchParams.set('ticket', ticketInQuery)
+	const namespace = target.namespace.trim()
+	const pod = target.pod.trim()
+	if (namespace.length === 0)
+		throw new Error('target.namespace is required')
+	if (pod.length === 0)
+		throw new Error('target.pod is required')
+	u.searchParams.set('namespace', namespace)
+	u.searchParams.set('pod', pod)
+	const container = typeof target.container === 'string' ? target.container.trim() : ''
+	if (container.length > 0)
+		u.searchParams.set('container', container)
+	for (const commandPart of target.command ?? []) {
+		const value = commandPart.trim()
+		if (value.length > 0)
+			u.searchParams.append('command', value)
+	}
 	return u.toString()
 }
 
@@ -220,37 +207,13 @@ async function createOpenPromise(ws: WsLike): Promise<void> {
 	})
 }
 
-export async function issueWsTicket(client: ProtocolClientOptions, req: WsTicketRequest, signal?: AbortSignal): Promise<WsTicketResponse> {
-	const fetchLike = client.fetch ?? defaultFetchLike()
-	const baseUrl = client.baseUrl.replace(/\/$/, '')
-	const ticketPath = client.ticketPath ?? '/ws-ticket'
-	const url = joinUrl(baseUrl, ticketPath)
-
-	const res = await fetchLike(url, {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(req),
-		signal,
-	})
-
-	const data: unknown = await res.json().catch(() => null)
-	if (!res.ok)
-		throw new Error(`failed to get ticket: HTTP ${res.status}`)
-	if (data === null || typeof data !== 'object')
-		throw new Error(`failed to get ticket: invalid JSON response (HTTP ${res.status})`)
-
-	const r = data as Partial<WsTicketResponse> & Partial<ErrorResponse>
-	if (r.ok === true && typeof r.ticket === 'string' && typeof r.expiresAt === 'number')
-		return { ok: true, ticket: r.ticket, expiresAt: r.expiresAt }
-
-	const msg = r.ok === false && typeof r.error === 'string' ? r.error : `HTTP ${res.status}`
-	throw new Error(`failed to get ticket: ${msg}`)
-}
-
 export async function connectTerminalStreams(options: ConnectTerminalStreamsOptions): Promise<TerminalStreams> {
 	const baseUrl = options.client.baseUrl.replace(/\/$/, '')
 	const wsPath = options.client.wsPath ?? '/exec'
 	const wsFactory = options.client.wsFactory ?? defaultWsFactory()
+	const kubeconfig = options.connect.kubeconfig.trim()
+	if (kubeconfig.length === 0)
+		throw new Error('kubeconfig is required')
 
 	const ac = new AbortController()
 	if (options.signal) {
@@ -262,20 +225,16 @@ export async function connectTerminalStreams(options: ConnectTerminalStreamsOpti
 		}
 	}
 
-	let ticket = options.connect.ticket
-	if (options.ticketRequest) {
-		const r = await issueWsTicket(options.client, options.ticketRequest, ac.signal)
-		ticket = r.ticket
-	}
-	if ((typeof ticket !== 'string' || ticket.trim().length === 0) && typeof options.connect.ticketProvider === 'function')
-		ticket = await options.connect.ticketProvider(ac.signal)
-	if (typeof ticket !== 'string' || ticket.trim().length === 0)
-		throw new Error('ticket is required (provide connect.ticket/connect.ticketProvider or ticketRequest)')
-
-	const wsUrl = toWsUrl(baseUrl, wsPath, options.connect.ticketInQuery === true ? ticket : undefined)
+	const wsUrl = toWsUrl(baseUrl, wsPath, options.connect.target)
+	const protocols = options.connect.authInMessage === true
+		? [TTY_WS_SUBPROTOCOL]
+		: [
+				TTY_WS_SUBPROTOCOL,
+				encodeKubeconfigSubprotocol(kubeconfig),
+			]
 	let ws: WsLike
 	try {
-		ws = wsFactory(wsUrl)
+		ws = wsFactory(wsUrl, protocols)
 	}
 	catch (err) {
 		throw new Error(`failed to create WebSocket: ${toErrorMessage(err)}`)
@@ -413,14 +372,14 @@ export async function connectTerminalStreams(options: ConnectTerminalStreamsOpti
 		ws.onerror = onError
 	}
 
-	// Auth after open (unless ticket is embedded in query).
-	if (options.connect.ticketInQuery !== true) {
+	// Auth after open when kubeconfig is not offered in subprotocols.
+	if (options.connect.authInMessage === true) {
 		void openP.then(async () => {
-			await sendCtrl({ type: 'auth', ticket })
+			await sendCtrl({ type: 'auth', kubeconfig })
 		}).catch(() => {})
 	}
 
-	// If the ticket is in query, server might authed quickly; still allow initial resize after authed.
+	// When kubeconfig is offered in subprotocols, server may auth before the first resize.
 	void openP.then(() => setState('connecting')).catch(() => {})
 
 	const stdin = new WritableStream<Uint8Array>({

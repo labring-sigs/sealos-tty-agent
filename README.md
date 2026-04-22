@@ -1,4 +1,4 @@
-# sealos-tty-agent
+# sealos-tty-bridge
 
 Kubernetes `exec` terminal gateway over WebSocket.
 
@@ -8,8 +8,8 @@ Browser (xterm.js) <-> this server (WS) <-> Kubernetes API Server (exec) <-> Pod
 
 ## What’s in this repo
 
-- **Server**: `sealos-tty-agent` — a small HTTP + WebSocket gateway that turns Kubernetes `pods/exec` into a browser-friendly terminal stream.
-- **Client**: `@labring/sealos-tty-client` — a Web Streams API client (in `packages/protocol-client`) that handles ticket issuance + WebSocket wiring for you.
+- **Server**: `sealos-tty-bridge` — a small HTTP + WebSocket gateway that turns Kubernetes `pods/exec` into a browser-friendly terminal stream.
+- **Client**: `@labring/sealos-tty-client` — a Web Streams API client (in `packages/protocol-client`) that handles WebSocket auth + stream wiring for you.
 
 ## Server usage
 
@@ -31,9 +31,9 @@ docker compose up -d
 
 # or use Docker CLI
 # Build the image
-docker build -t sealos-tty-agent:latest .
+docker build -t sealos-tty-bridge:latest .
 # Spin up the container
-docker run -d -p 3000:3000 -v $(pwd)/config.json:/app/config.json:ro sealos-tty-agent:latest
+docker run -d -p 3000:3000 -v $(pwd)/config.json:/app/config.json:ro sealos-tty-bridge:latest
 ```
 
 ## Client usage
@@ -51,8 +51,11 @@ import { connectTerminalStreams } from '@labring/sealos-tty-client'
 
 const { stdout, stdin, resize } = await connectTerminalStreams({
 	client: { baseUrl: 'http://localhost:3000' },
-	ticketRequest: { kubeconfig, namespace: 'default', pod: 'mypod', container: 'c1' },
-	connect: { initialSize: { cols: term.cols, rows: term.rows } },
+	connect: {
+		kubeconfig,
+		target: { namespace: 'default', pod: 'mypod', container: 'c1' },
+		initialSize: { cols: term.cols, rows: term.rows },
+	},
 })
 
 const enc = new TextEncoder()
@@ -68,7 +71,8 @@ void stdout
 Notes:
 
 - The server starts Kubernetes `exec` only after receiving the **first** `resize`.
-- If you need lower-level access, call the HTTP API to get a ticket, then connect to `GET /exec` via WebSocket.
+- By default the client offers kubeconfig in `Sec-WebSocket-Protocol` using a stable `sealos-tty-v1` token plus a URL-encoded data-bearing token. Set `connect.authInMessage = true` to send kubeconfig in the first auth frame instead.
+- `KUBE_API_SERVER` overrides the current cluster `server` in user kubeconfigs. Set it to `auto` to derive `https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT_HTTPS` inside a Kubernetes pod.
 
 ## Run
 
@@ -79,32 +83,16 @@ pnpm run dev
 
 ## API
 
-### `POST /ws-ticket`
-
-Issues a short-lived, one-time ticket for browser clients.
-
-Request body:
-
-```json
-{
-	"kubeconfig": "...",
-	"namespace": "default",
-	"pod": "mypod",
-	"container": "c1",
-	"command": ["bash", "-il"]
-}
-```
-
-Response:
-
-```json
-{ "ok": true, "ticket": "...", "expiresAt": 0 }
-```
-
 ### `GET /exec` (WebSocket)
 
-- If you cannot put the ticket in the URL, the first non-ping JSON message **must** be:
-  - `{ "type": "auth", "ticket": "..." }`
+- Query parameters:
+  - `namespace=<namespace>`
+  - `pod=<pod>`
+  - optional `container=<container>`
+  - optional repeated `command=<argv-part>` entries
+- Authentication:
+  - Preferred: offer `sealos-tty-v1` plus a kubeconfig-bearing token in `Sec-WebSocket-Protocol`; the server validates kubeconfig and echoes only `sealos-tty-v1`.
+  - Fallback: if kubeconfig is not offered in the handshake, the first non-ping JSON message **must** be `{ "type": "auth", "kubeconfig": "..." }`.
 - After auth, the client **must** send the first resize:
   - `{ "type": "resize", "cols": 120, "rows": 30 }`
   - The server starts Kubernetes exec only after receiving the first resize.

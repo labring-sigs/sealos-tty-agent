@@ -1,6 +1,6 @@
 ## `@labring/sealos-tty-client`
 
-Web Streams API client for `sealos-tty-agent` (Kubernetes exec terminal over WebSocket).
+Web Streams API client for `sealos-tty-bridge` (Kubernetes exec terminal over WebSocket).
 
 ### Install
 
@@ -15,8 +15,11 @@ import { connectTerminalStreams } from '@labring/sealos-tty-client'
 
 const { stdout, stdin, resize } = await connectTerminalStreams({
 	client: { baseUrl: 'http://localhost:3000' },
-	ticketRequest: { kubeconfig, namespace: 'default', pod: 'mypod', container: 'c1' },
-	connect: { initialSize: { cols: term.cols, rows: term.rows } },
+	connect: {
+		kubeconfig,
+		target: { namespace: 'default', pod: 'mypod', container: 'c1' },
+		initialSize: { cols: term.cols, rows: term.rows },
+	},
 })
 
 // stdin: xterm -> ws (binary)
@@ -36,5 +39,7 @@ void stdout
 ### Notes
 
 - The server starts `exec` only after the **first** `resize`.
+- By default the client sends `sealos-tty-v1` plus a URL-encoded kubeconfig-bearing subprotocol token (with the `urlencoded.kubeconfig.` prefix) during the WebSocket handshake.
+- Set `connect.authInMessage = true` to send `{ type: 'auth', kubeconfig }` after the socket opens instead.
 - Use `TextDecoderStream()` (or `TextDecoder(..., { stream: true })`) for UTF-8 across frames.
-- In Node/SSR, inject `wsFactory` (e.g. `ws`) and `fetch` if missing.
+- In Node/SSR, inject `wsFactory` (e.g. `ws`) if `WebSocket` is missing.

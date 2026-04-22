@@ -1,5 +1,5 @@
 services:
-  sealos-tty-agent:
+  sealos-tty-bridge:
     build: .
     ports:
       - "${PORT:-3000}:3000"

@@ -1,10 +1,10 @@
 import type { V1Status } from '@kubernetes/client-node'
-import type { ServerFrame } from '@labring/sealos-tty-client'
+import type { ServerFrame } from '../packages/protocol-client/src/protocol.ts'
 import type { ExecTarget } from './utils/http-utils.ts'
 import type { WsStreams } from './utils/ws-streams.ts'
 import { pipeline } from 'node:stream'
 import * as k8s from '@kubernetes/client-node'
-import { safeJsonStringify, toErrorMessage } from '@labring/sealos-tty-client'
+import { safeJsonStringify, toErrorMessage } from '../packages/protocol-client/src/protocol.ts'
 
 import { loadKubeConfigFromString } from './utils/k8s/kubeconfig.ts'
 import { ResizableStdout } from './utils/k8s/resizable-stdout.ts'
@@ -41,8 +41,10 @@ export type WsConnection = {
 }
 
 export type Session = {
+	authStarted: boolean
 	started: boolean
 	starting: boolean
+	authenticating: boolean
 	stdout?: ResizableStdout
 	k8sWs?: { close: () => void }
 	kubeconfig?: string
@@ -103,7 +105,7 @@ export async function startExecIfNeeded(
 		sess.starting = false
 		sendCtrl(conn, {
 			type: 'error',
-			message: 'Missing kubeconfig. Authenticate first: send { "type": "auth", "ticket": "..." } as the first WebSocket message (or pass ticket via ?ticket=...).',
+			message: 'Missing kubeconfig. Authenticate first by offering it in Sec-WebSocket-Protocol or by sending { "type": "auth", "kubeconfig": "..." } as the first WebSocket message.',
 		})
 		try {
 			conn.close(1008, 'missing kubeconfig')
@@ -116,7 +118,7 @@ export async function startExecIfNeeded(
 		sess.starting = false
 		sendCtrl(conn, {
 			type: 'error',
-			message: 'Missing exec target. Request a ticket with namespace/pod/container first.',
+			message: 'Missing exec target. Connect to /exec with namespace and pod query parameters first.',
 		})
 		try {
 			conn.close(1008, 'missing target')
@@ -125,12 +127,21 @@ export async function startExecIfNeeded(
 		return
 	}
 
-	const kc = loadKubeConfigFromString(sess.kubeconfig)
+	const kcResult = loadKubeConfigFromString(sess.kubeconfig)
+	if (!kcResult.ok) {
+		sess.starting = false
+		sendCtrl(conn, { type: 'error', message: kcResult.message })
+		try {
+			conn.close(1008, 'invalid kubeconfig')
+		}
+		catch {}
+		return
+	}
 
 	const stdout = new ResizableStdout()
 	stdout.resize(size.cols, size.rows)
 
-	const exec = new k8s.Exec(kc)
+	const exec = new k8s.Exec(kcResult.value)
 
 	// stdout/stderr -> wsOut (binary frames)
 	pipeline(stdout, sess.streams.wsOut, (err) => {

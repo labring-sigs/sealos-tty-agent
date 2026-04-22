@@ -1,5 +1,8 @@
 import * as z from 'zod/mini'
 
+export const TTY_WS_SUBPROTOCOL = 'sealos-tty-v1'
+export const TTY_KUBECONFIG_SUBPROTOCOL_PREFIX = 'urlencoded.kubeconfig.'
+
 const ClientStdinTextSchema = z.object({
 	type: z.literal('stdin'),
 	data: z.string(),
@@ -7,7 +10,7 @@ const ClientStdinTextSchema = z.object({
 
 const ClientAuthSchema = z.object({
 	type: z.literal('auth'),
-	ticket: z.string().check(z.trim(), z.minLength(1)),
+	kubeconfig: z.string().check(z.trim(), z.minLength(1)),
 })
 
 const ClientResizeSchema = z.object({
@@ -37,6 +40,31 @@ export type ServerFrame
 		| { type: 'status', status: unknown }
 		| { type: 'error', message: string }
 		| { type: 'pong' }
+
+export function encodeKubeconfigSubprotocol(kubeconfig: string): string {
+	// Subprotocols must conform to item 10 of RFC6455 section 4.1 (namely, the HTTP "tokens").
+	// See: https://datatracker.ietf.org/doc/html/rfc6455#section-4.1
+	const encoded = encodeURIComponent(kubeconfig)
+		.replace(/\(/g, '%28')
+		.replace(/\)/g, '%29')
+	return `${TTY_KUBECONFIG_SUBPROTOCOL_PREFIX}${encoded}`
+}
+
+export function decodeKubeconfigSubprotocol(protocol: string): string | undefined {
+	if (!protocol.startsWith(TTY_KUBECONFIG_SUBPROTOCOL_PREFIX))
+		return undefined
+
+	const encoded = protocol.slice(TTY_KUBECONFIG_SUBPROTOCOL_PREFIX.length)
+	if (encoded.length === 0)
+		return undefined
+
+	try {
+		return decodeURIComponent(encoded)
+	}
+	catch {
+		return undefined
+	}
+}
 
 export function safeJsonStringify(value: unknown): string {
 	const replacer = (_k: string, v: unknown): unknown => (typeof v === 'bigint' ? v.toString() : v)

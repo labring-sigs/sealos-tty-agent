@@ -1,5 +1,5 @@
 {
-	"name": "sealos-tty-agent",
+	"name": "sealos-tty-bridge",
 	"type": "module",
 	"version": "0.0.1",
 	"private": "true",
