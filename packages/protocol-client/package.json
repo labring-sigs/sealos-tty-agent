@@ -1,7 +1,7 @@
 {
 	"name": "@labring/sealos-tty-client",
 	"type": "module",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Web Streams API client for sealos-tty-bridge (Kubernetes exec terminal over WebSocket).",
 	"author": {
 		"name": "Sealos",
@@ -11,14 +11,14 @@
 		"Nixieboluo"
 	],
 	"license": "MIT",
-	"homepage": "https://github.com/labring/sealos-tty-agent/tree/main/packages/protocol-client#readme",
+	"homepage": "https://github.com/labring/sealos-tty-bridge/tree/main/packages/protocol-client#readme",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/labring-sigs/sealos-tty-agent.git",
+		"url": "git+https://github.com/labring-sigs/sealos-tty-bridge.git",
 		"directory": "packages/protocol-client"
 	},
 	"bugs": {
-		"url": "https://github.com/labring-sigs/sealos-tty-agent/issues"
+		"url": "https://github.com/labring-sigs/sealos-tty-bridge/issues"
 	},
 	"keywords": [
 		"kubernetes",
